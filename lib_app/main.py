@@ -1,21 +1,21 @@
-from typing import Union
+from typing import Optional
 
 from fastapi import FastAPI, Depends, Request, HTTPException
-from fastapi_pagination import add_pagination, Page, paginate
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from starlette.responses import JSONResponse
 
 import crud
 import schemas
+from db import models
 from db.database import SessionLocal
-
+from lib_app.schemas import AuthorCreate
 
 app = FastAPI()
 
 
 def get_db() -> Session:
-    db = SessionLocal()
+    db: SessionLocal()
 
     try:
         yield db
@@ -23,23 +23,17 @@ def get_db() -> Session:
         db.close()
 
 
-@app.get("/")
-def read_root():
-    return {"Hello": "World"}
-
-
-@app.get("/items/{item_id}")
-def read_item(item_id: int, q: Union[str, None] = None):
-    return {"item_id": item_id, "q": q}
-
-
 @app.get("/authors/")
-def read_authors(db: Session = Depends(get_db)) -> Page[schemas.AuthorList]:
-    return paginate(crud.get_all_authors(db))
+def read_authors(skip: int = 0,
+                 limit: int = 10,
+                 db: Session = Depends(get_db)) \
+        -> Optional[models.Author]:
+    return crud.get_all_authors(db, skip=skip, limit=limit)
 
 
 @app.get("/authors/{author_id}/", response_model=schemas.AuthorRetrive)
-def retrieve_author(author_id: int, db: Session = Depends(get_db)):
+def retrieve_author(author_id: int, db: Session = Depends(get_db))\
+        -> Optional[models.Author]:
     db_author = crud.get_author_by_id(db=db, author_id=author_id)
 
     if not db_author:
@@ -50,18 +44,23 @@ def retrieve_author(author_id: int, db: Session = Depends(get_db)):
 
 @app.post("/authors/", response_model=schemas.AuthorList)
 def create_author(author_create: schemas.AuthorCreate,
-                  db: Session = Depends(get_db)):
+                  db: Session = Depends(get_db))\
+        -> AuthorCreate:
     return crud.create_author(db=db, author=author_create)
 
 
 @app.get("/books/")
-def get_all_books(db: Session = Depends(get_db), author: int | None = None) \
-        -> Page[schemas.BookList]:
-    return paginate(crud.get_all_books(db=db, author=author))
+def get_all_books(db: Session = Depends(get_db),
+                  author: int | None = None,
+                  skip: int = 0,
+                  limit: int = 10) \
+        -> Optional[models.Book]:
+    return crud.get_all_books(db=db, author=author, skip=skip, limit=limit)
 
 
 @app.get("/books/{book_id}/", response_model=schemas.BookRetrive)
-def get_book(book_id: int, db: Session = Depends(get_db)):
+def get_book(book_id: int, db: Session = Depends(get_db))\
+        -> Optional[models.Book]:
     db_book = crud.get_book_by_id(db=db, book_id=book_id)
 
     if db_book:
@@ -74,7 +73,8 @@ def get_book(book_id: int, db: Session = Depends(get_db)):
 
 @app.post("/books/", response_model=schemas.BookCreate)
 def create_book(book_create: schemas.BookCreate,
-                db: Session = Depends(get_db)):
+                db: Session = Depends(get_db))\
+        -> Optional[models.Book]:
     return crud.create_book(db=db, book=book_create)
 
 
@@ -89,5 +89,3 @@ async def validation_exception_handler(request: Request, exc: IntegrityError):
             )
         },
     )
-
-add_pagination(app)
